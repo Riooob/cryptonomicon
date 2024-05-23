@@ -73,7 +73,7 @@
                 {{ t.name }} - USD
               </dt>
               <dd class="mt-1 text-3xl font-semibold text-gray-900">
-                {{ t.price }}
+                {{ formatPrice(t.price) }}
               </dd>
             </div>
             <div class="w-full border-t border-gray-200"></div>
@@ -144,7 +144,7 @@
 </template>
 
 <script>
-import { loadTicker } from "./api";
+import { subscribeToTicker, unsubscribeFromTicker } from "./api";
 export default {
   name: "App",
   data() {
@@ -170,6 +170,11 @@ export default {
     const tickersData = localStorage.getItem("cryptonomicon-list");
     if (tickersData) {
       this.tickers = JSON.parse(tickersData);
+      this.tickers.forEach((ticker) => {
+        subscribeToTicker(ticker.name, (newPrice) =>
+          this.updateTicker(ticker.name, newPrice)
+        );
+      });
     }
     setInterval(this.updateTickers, 5000);
   },
@@ -207,23 +212,32 @@ export default {
     },
   },
   methods: {
-    async updateTickers() {
-      if (!this.tickers.length) {
-        return;
-      }
-      const exchangeData = await loadTicker(this.tickers.map((t) => t.name));
-      this.tickers.forEach((ticker) => {
-        const price = exchangeData[ticker.name.toUpperCase()];
-        ticker.price = price ? 1 / price : "-";
-      });
+    updateTicker(tickerName, price) {
+      this.tickers
+        .filter((t) => t.name === tickerName)
+        .forEach((t) => {
+          t.price = price;
+        });
     },
+    formatPrice(price) {
+      if (price === "-") {
+        return price;
+      }
+      return price > 1 ? price.toFixed(2) : price.toPrecision(2);
+    },
+
+    async updateTickers() {},
     add() {
       const currentTicker = {
         name: this.ticker,
         price: "-",
       };
       this.tickers = [...this.tickers, currentTicker];
+      this.ticker = "";
       this.filter = "";
+      subscribeToTicker(currentTicker.name, (newPrice) =>
+        this.updateTicker(currentTicker.name, newPrice)
+      );
     },
     select(ticker) {
       this.selectedTicker = ticker;
@@ -233,6 +247,7 @@ export default {
       if (this.selectedTicker === tickerToRemove) {
         this.selectedTicker = null;
       }
+      unsubscribeFromTicker(tickerToRemove.name);
     },
   },
   watch: {
